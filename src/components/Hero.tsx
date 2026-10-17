@@ -2,42 +2,623 @@ import { useState, useRef } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import type { AppConfig, City } from '../types'
 import { Button, H, P, Icon, Eyebrow, text, heading } from './UI'
-interface Props {config:AppConfig|null;onPlan:()=>void;onDemo:()=>void;onSaved:()=>void;onCity:(city:City)=>void;savedCount:number;busy:boolean}
-export default function Hero({config,onPlan,onDemo,onSaved,onCity,savedCount,busy}:Props){
-  const [menu,setMenu]=useState(false),[paused,setPaused]=useState(false),[failed,setFailed]=useState(false)
-  const video=useRef<HTMLVideoElement>(null),reduced=useReducedMotion()
-  const rise={initial:{opacity:0,y:20},animate:{opacity:1,y:0},transition:{duration:.75}}
-  return <>
-    <a className="skip-link" href="#planner" style={text(14)}>Skip to travel planner</a>
-    <section className="hero" aria-label="Aurora Travel introduction">
-      <img className="hero-background" src="/aurora-landscape.svg" alt=""/>
-      {config?.heroAvailable&&!failed&&!reduced&&<video ref={video} className="hero-background" src="/hero.mp4" autoPlay muted loop playsInline aria-hidden="true" onError={()=>setFailed(true)}/>}
-      <div className="hero-shade"/>
-      <motion.nav className="navbar" initial={{opacity:0,y:-12}} animate={{opacity:1,y:0}} transition={{duration:.6}} aria-label="Main navigation">
-        <a className="brand" href="#" aria-label="Aurora Travel home"><Icon name="car" size={30}/><span style={{...heading(26),letterSpacing:'-.055em'}}>aurora<span style={text(10,400,'var(--mint)')}> / travel</span></span></a>
-        <div className="nav-links"><a href="#explore" style={text(12,500)}>Explore</a><a href="#planner" style={text(12,500)}>Trip planner</a><a href="#how-it-works" style={text(12,500)}>How it works</a><button onClick={onSaved} style={text(12,500)}>My trips {savedCount>0&&<span className="count">{savedCount}</span>}</button></div>
-        <div className="nav-actions"><Button variant="light" onClick={onPlan}>Plan a trip <Icon name="up-right" size={15}/></Button><button className="icon-btn mobile-menu-button" onClick={()=>setMenu(!menu)} aria-label="Toggle navigation" aria-expanded={menu}><Icon name={menu?'close':'menu'}/></button></div>
-        {menu&&<div className="mobile-menu"><a href="#explore" style={text(14)} onClick={()=>setMenu(false)}>Explore destinations</a><a href="#planner" style={text(14)} onClick={()=>setMenu(false)}>Trip planner</a><button style={text(14)} onClick={()=>{setMenu(false);onSaved()}}>My saved trips</button><a href="#how-it-works" style={text(14)} onClick={()=>setMenu(false)}>How it works</a></div>}
-      </motion.nav>
-      <div className="hero-content">
-        <motion.div {...rise} className="hero-badge"><span className="avatar-dots"><i/><i/><i/></span><span style={text(11,400,'#d1ddd3')}>Your time. Your budget. <strong style={{fontWeight:500,color:'#f6f4ea'}}>Your kind of trip.</strong></span></motion.div>
-        <motion.h1 {...rise} transition={{delay:.12,duration:.8}} style={{...heading('clamp(44px, 5.4vw, 78px)'),maxWidth:690,marginTop:24,letterSpacing:'-.055em',lineHeight:1.055}}>A little less planning.<br/><span style={{color:'#c3dfc6'}}>A lot more living.</span></motion.h1>
-        <motion.p {...rise} transition={{delay:.24,duration:.8}} style={{...text(15,400,'#c0c9c1'),maxWidth:370,marginTop:22,lineHeight:1.8}}>Thoughtful escapes, shaped around you. Find your places, set your pace, and let the next few days unfold.</motion.p>
-        <motion.div {...rise} transition={{delay:.36,duration:.8}} className="hero-buttons"><Button className="hero-cta" variant="primary" onClick={onPlan}>Find my next escape <Icon name="arrow"/></Button><button className="demo-link" onClick={onDemo} disabled={busy} style={text(12,500)}><span className="play-circle"><Icon name="play" size={12}/></span>{busy?'Creating your plan...':'Try a sample trip'}</button></motion.div>
-        <motion.div {...rise} transition={{delay:.48,duration:.8}} className="hero-footnote" style={text(10,400,'#9aaba0')}><span className="tiny-dot"/>Free local prototype <span className="separator"/>No account needed <span className="separator"/>Optional AI</motion.div>
-      </div>
-      <motion.div className="hero-note" initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} transition={{delay:.65,duration:.8}}><span className="compass-icon"><Icon name="route" size={24}/></span><div><span style={{...text(9,500,'#b4c9b9'),letterSpacing:'.17em'}}>MADE FOR THE WAY YOU TRAVEL</span><p style={{...heading(18),marginTop:7}}>A plan. Not a packed schedule.</p></div></motion.div>
-      <div className="hero-bottom"><div className="hero-destinations" style={text(11,400,'#bfcdc1')}><Icon name="globe" size={15}/><button style={text(11)} onClick={()=>onCity('Hyderabad')}>Hyderabad</button><span>/</span><button style={text(11)} onClick={()=>onCity('Jaipur')}>Jaipur</button><span>/</span><button style={text(11)} onClick={()=>onCity('Goa')}>Goa</button></div><div className="hero-bottom-right">{config?.heroAvailable&&!failed&&!reduced&&<button className="icon-btn" onClick={()=>{const next=!paused;setPaused(next);if(next)video.current?.pause();else void video.current?.play()}} aria-label={paused?'Play background video':'Pause background video'} style={text(10)}>{paused?'Play':'Pause'}</button>}<a href="#explore" style={text(10,400,'#bbc8bd')}>A little inspiration below <Icon name="arrow" size={14}/></a></div></div>
-    </section>
-    <section className="promise-strip" aria-label="Planner overview"><div><Icon name="pin"/><span style={text(12)}>Three places. Endless possibilities.</span></div><div><Icon name="wallet"/><span style={text(12)}>Your budget, without the guesswork.</span></div><div><Icon name="clock"/><span style={text(12)}>One to three days, at your pace.</span></div></section>
-  </>
+
+interface Props {
+  config: AppConfig | null
+  onPlan: () => void
+  onDemo: () => void
+  onSaved: () => void
+  onCity: (city: City) => void
+  savedCount: number
+  busy: boolean
 }
-export function Destinations({onSelect}:{onSelect:(city:City)=>void}){
-  const cities:{city:City;subtitle:string;note:string;number:string;tags:string;icon:'museum'|'leaf'|'history'}[]=[
-    {city:'Hyderabad',subtitle:'Old soul. New discoveries.',note:'Heritage, culture & lakeside pauses',number:'01',tags:'HISTORY / CULTURE',icon:'history'},
-    {city:'Jaipur',subtitle:'A little royal. A little unexpected.',note:'Palaces, architecture & quiet gardens',number:'02',tags:'ARCHITECTURE / HERITAGE',icon:'museum'},
-    {city:'Goa',subtitle:'Take the scenic way.',note:'Coastal walks, old streets & slow days',number:'03',tags:'NATURE / SLOW TRAVEL',icon:'leaf'}
+
+export default function Hero({
+  config,
+  onPlan,
+  onDemo,
+  onSaved,
+  onCity,
+  savedCount,
+  busy
+}: Props) {
+  const [menu, setMenu] = useState(false)
+  const [paused, setPaused] = useState(false)
+  const [failed, setFailed] = useState(false)
+
+  const video = useRef<HTMLVideoElement>(null)
+  const reduced = useReducedMotion()
+
+  const rise = {
+    initial: { opacity: 0, y: 20 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.75 }
+  }
+
+  return (
+    <>
+      <a className="skip-link" href="#planner" style={text(14)}>
+        Skip to travel planner
+      </a>
+
+      <section className="hero" aria-label="Aurora Travel introduction">
+        {(failed || reduced) && (
+          <img
+            className="hero-background"
+            src="/aurora-landscape.svg"
+            alt=""
+          />
+        )}
+
+        {!failed && !reduced && (
+          <video
+            ref={video}
+            className="hero-background"
+            src="/hero.mp4"
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="auto"
+            aria-hidden="true"
+            onError={() => setFailed(true)}
+          />
+        )}
+
+        <div className="hero-shade" />
+
+        <motion.nav
+          className="navbar"
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          aria-label="Main navigation"
+        >
+          <a className="brand" href="#" aria-label="Aurora Travel home">
+            <Icon name="car" size={30} />
+
+            <span
+              style={{
+                ...heading(26),
+                letterSpacing: '-.055em'
+              }}
+            >
+              aurora
+              <span style={text(10, 400, 'var(--mint)')}>
+                {' '}
+                / travel
+              </span>
+            </span>
+          </a>
+
+          <div className="nav-links">
+            <a href="#explore" style={text(12, 500)}>
+              Explore
+            </a>
+
+            <a href="#planner" style={text(12, 500)}>
+              Trip planner
+            </a>
+
+            <a href="#how-it-works" style={text(12, 500)}>
+              How it works
+            </a>
+
+            <button onClick={onSaved} style={text(12, 500)}>
+              My trips
+              {savedCount > 0 && (
+                <span className="count">{savedCount}</span>
+              )}
+            </button>
+          </div>
+
+          <div className="nav-actions">
+            <Button variant="light" onClick={onPlan}>
+              Plan a trip <Icon name="up-right" size={15} />
+            </Button>
+
+            <button
+              className="icon-btn mobile-menu-button"
+              onClick={() => setMenu(!menu)}
+              aria-label="Toggle navigation"
+              aria-expanded={menu}
+            >
+              <Icon name={menu ? 'close' : 'menu'} />
+            </button>
+          </div>
+
+          {menu && (
+            <div className="mobile-menu">
+              <a
+                href="#explore"
+                style={text(14)}
+                onClick={() => setMenu(false)}
+              >
+                Explore destinations
+              </a>
+
+              <a
+                href="#planner"
+                style={text(14)}
+                onClick={() => setMenu(false)}
+              >
+                Trip planner
+              </a>
+
+              <button
+                style={text(14)}
+                onClick={() => {
+                  setMenu(false)
+                  onSaved()
+                }}
+              >
+                My saved trips
+              </button>
+
+              <a
+                href="#how-it-works"
+                style={text(14)}
+                onClick={() => setMenu(false)}
+              >
+                How it works
+              </a>
+            </div>
+          )}
+        </motion.nav>
+
+        <div className="hero-content">
+          <motion.div {...rise} className="hero-badge">
+            <span className="avatar-dots">
+              <i />
+              <i />
+              <i />
+            </span>
+
+            <span style={text(11, 400, '#d1ddd3')}>
+              Your time. Your budget.{' '}
+              <strong
+                style={{
+                  fontWeight: 500,
+                  color: '#f6f4ea'
+                }}
+              >
+                Your kind of trip.
+              </strong>
+            </span>
+          </motion.div>
+
+          <motion.h1
+            {...rise}
+            transition={{
+              delay: 0.12,
+              duration: 0.8
+            }}
+            style={{
+              ...heading('clamp(44px, 5.4vw, 78px)'),
+              maxWidth: 690,
+              marginTop: 24,
+              letterSpacing: '-.055em',
+              lineHeight: 1.055
+            }}
+          >
+            A little less planning.
+            <br />
+            <span style={{ color: '#c3dfc6' }}>
+              A lot more living.
+            </span>
+          </motion.h1>
+
+          <motion.p
+            {...rise}
+            transition={{
+              delay: 0.24,
+              duration: 0.8
+            }}
+            style={{
+              ...text(15, 400, '#c0c9c1'),
+              maxWidth: 370,
+              marginTop: 22,
+              lineHeight: 1.8
+            }}
+          >
+            Thoughtful escapes, shaped around you. Find your places,
+            set your pace, and let the next few days unfold.
+          </motion.p>
+
+          <motion.div
+            {...rise}
+            transition={{
+              delay: 0.36,
+              duration: 0.8
+            }}
+            className="hero-buttons"
+          >
+            <Button
+              className="hero-cta"
+              variant="primary"
+              onClick={onPlan}
+            >
+              Find my next escape <Icon name="arrow" />
+            </Button>
+
+            <button
+              className="demo-link"
+              onClick={onDemo}
+              disabled={busy}
+              style={text(12, 500)}
+            >
+              <span className="play-circle">
+                <Icon name="play" size={12} />
+              </span>
+
+              {busy
+                ? 'Creating your plan...'
+                : 'Try a sample trip'}
+            </button>
+          </motion.div>
+
+          <motion.div
+            {...rise}
+            transition={{
+              delay: 0.48,
+              duration: 0.8
+            }}
+            className="hero-footnote"
+            style={text(10, 400, '#9aaba0')}
+          >
+            <span className="tiny-dot" />
+            Free local prototype
+            <span className="separator" />
+            No account needed
+            <span className="separator" />
+            Optional AI
+          </motion.div>
+        </div>
+
+        <motion.div
+          className="hero-note"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{
+            delay: 0.65,
+            duration: 0.8
+          }}
+        >
+          <span className="compass-icon">
+            <Icon name="route" size={24} />
+          </span>
+
+          <div>
+            <span
+              style={{
+                ...text(9, 500, '#b4c9b9'),
+                letterSpacing: '.17em'
+              }}
+            >
+              MADE FOR THE WAY YOU TRAVEL
+            </span>
+
+            <p
+              style={{
+                ...heading(18),
+                marginTop: 7
+              }}
+            >
+              A plan. Not a packed schedule.
+            </p>
+          </div>
+        </motion.div>
+
+        <div className="hero-bottom">
+          <div
+            className="hero-destinations"
+            style={text(11, 400, '#bfcdc1')}
+          >
+            <Icon name="globe" size={15} />
+
+            <button
+              style={text(11)}
+              onClick={() => onCity('Hyderabad')}
+            >
+              Hyderabad
+            </button>
+
+            <span>/</span>
+
+            <button
+              style={text(11)}
+              onClick={() => onCity('Jaipur')}
+            >
+              Jaipur
+            </button>
+
+            <span>/</span>
+
+            <button
+              style={text(11)}
+              onClick={() => onCity('Goa')}
+            >
+              Goa
+            </button>
+          </div>
+
+          <div className="hero-bottom-right">
+            {!failed && !reduced && (
+              <button
+                className="icon-btn"
+                onClick={() => {
+                  const next = !paused
+                  setPaused(next)
+
+                  if (next) {
+                    video.current?.pause()
+                  } else {
+                    void video.current?.play()
+                  }
+                }}
+                aria-label={
+                  paused
+                    ? 'Play background video'
+                    : 'Pause background video'
+                }
+                style={text(10)}
+              >
+                {paused ? 'Play' : 'Pause'}
+              </button>
+            )}
+
+            <a
+              href="#explore"
+              style={text(10, 400, '#bbc8bd')}
+            >
+              A little inspiration below{' '}
+              <Icon name="arrow" size={14} />
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section
+        className="promise-strip"
+        aria-label="Planner overview"
+      >
+        <div>
+          <Icon name="pin" />
+          <span style={text(12)}>
+            Three places. Endless possibilities.
+          </span>
+        </div>
+
+        <div>
+          <Icon name="wallet" />
+          <span style={text(12)}>
+            Your budget, without the guesswork.
+          </span>
+        </div>
+
+        <div>
+          <Icon name="clock" />
+          <span style={text(12)}>
+            One to three days, at your pace.
+          </span>
+        </div>
+      </section>
+    </>
+  )
+}
+
+export function Destinations({
+  onSelect
+}: {
+  onSelect: (city: City) => void
+}) {
+  const cities: {
+    city: City
+    subtitle: string
+    note: string
+    number: string
+    tags: string
+    icon: 'museum' | 'leaf' | 'history'
+  }[] = [
+    {
+      city: 'Hyderabad',
+      subtitle: 'Old soul. New discoveries.',
+      note: 'Heritage, culture & lakeside pauses',
+      number: '01',
+      tags: 'HISTORY / CULTURE',
+      icon: 'history'
+    },
+    {
+      city: 'Jaipur',
+      subtitle: 'A little royal. A little unexpected.',
+      note: 'Palaces, architecture & quiet gardens',
+      number: '02',
+      tags: 'ARCHITECTURE / HERITAGE',
+      icon: 'museum'
+    },
+    {
+      city: 'Goa',
+      subtitle: 'Take the scenic way.',
+      note: 'Coastal walks, old streets & slow days',
+      number: '03',
+      tags: 'NATURE / SLOW TRAVEL',
+      icon: 'leaf'
+    }
   ]
-  return <section className="section-wrap explore" id="explore"><div className="section-heading"><div><Eyebrow>A GOOD PLACE TO START</Eyebrow><H size="clamp(28px,3.2vw,42px)">Where will you wander?</H></div><P size={12}>Three curated destinations.<br/>A short escape that feels like you.</P></div><div className="destination-grid">{cities.map((c,i)=><motion.button key={c.city} className={`destination-card destination-${c.city.toLowerCase()}`} onClick={()=>onSelect(c.city)} whileHover={{y:-5}} whileTap={{scale:.985}} aria-label={`Plan a trip to ${c.city}`}><div className="destination-top"><span style={{...text(10,500,'#bfcec1'),letterSpacing:'.12em'}}>{c.tags}</span><span style={text(11,400,'#bdc9c1')}>{c.number}</span></div><div className="city-art" aria-hidden="true"><div className="city-sun"/><svg viewBox="0 0 400 175" fill="none"><path d={i===0?'M0 162h75V81h10V64h5v17h8v80h26v-61h80v61h27V81h9V64h5v17h10v81h145M129 100c0-48 67-48 67 0M135 161v-31c0-34 56-34 56 0v31M100 89h134M82 55l6-12 6 12m145 0 6-12 6 12':i===1?'M0 165h58V88h17V58h45V37h41V18h73v19h37v21h50v30h25v77h54M82 165V85h18v80m34 0V65h19v100m32 0V47h20v118m35 0V65h19v100m32 0V85h19v80':'M0 145c84-48 133 52 224 4s122-46 176-16M0 169c79-41 132 32 216 1s131-34 184-12M274 139c3-32 4-66-10-99M264 40c-14-20-39-17-52-9m52 9c22-23 48-10 54 1m-54-1c-25 0-49 13-43 28m43-28c30 1 36 29 29 37'} stroke="currentColor" strokeWidth="1.4"/><path d="M0 173h400" stroke="currentColor" opacity=".25"/></svg></div><div className="destination-bottom"><div><h3 style={heading(31)}>{c.city}</h3><p style={text(11,400,'#b7c5bb')}>{c.note}</p></div><span className="round-arrow"><Icon name="up-right" size={18}/></span></div></motion.button>)}</div></section>
+
+  return (
+    <section
+      className="section-wrap explore"
+      id="explore"
+    >
+      <div className="section-heading">
+        <div>
+          <Eyebrow>A GOOD PLACE TO START</Eyebrow>
+
+          <H size="clamp(28px,3.2vw,42px)">
+            Where will you wander?
+          </H>
+        </div>
+
+        <P size={12}>
+          Three curated destinations.
+          <br />
+          A short escape that feels like you.
+        </P>
+      </div>
+
+      <div className="destination-grid">
+        {cities.map((c, i) => (
+          <motion.button
+            key={c.city}
+            className={`destination-card destination-${c.city.toLowerCase()}`}
+            onClick={() => onSelect(c.city)}
+            whileHover={{ y: -5 }}
+            whileTap={{ scale: 0.985 }}
+            aria-label={`Plan a trip to ${c.city}`}
+          >
+            <div className="destination-top">
+              <span
+                style={{
+                  ...text(10, 500, '#bfcec1'),
+                  letterSpacing: '.12em'
+                }}
+              >
+                {c.tags}
+              </span>
+
+              <span style={text(11, 400, '#bdc9c1')}>
+                {c.number}
+              </span>
+            </div>
+
+            <div
+              className="city-art"
+              aria-hidden="true"
+            >
+              <div className="city-sun" />
+
+              <svg
+                viewBox="0 0 400 175"
+                fill="none"
+              >
+                <path
+                  d={
+                    i === 0
+                      ? 'M0 162h75V81h10V64h5v17h8v80h26v-61h80v61h27V81h9V64h5v17h10v81h145M129 100c0-48 67-48 67 0M135 161v-31c0-34 56-34 56 0v31M100 89h134M82 55l6-12 6 12m145 0 6-12 6 12'
+                      : i === 1
+                      ? 'M0 165h58V88h17V58h45V37h41V18h73v19h37v21h50v30h25v77h54M82 165V85h18v80m34 0V65h19v100m32 0V47h20v118m35 0V65h19v100m32 0V85h19v80'
+                      : 'M0 145c84-48 133 52 224 4s122-46 176-16M0 169c79-41 132 32 216 1s131-34 184-12M274 139c3-32 4-66-10-99M264 40c-14-20-39-17-52-9m52 9c22-23 48-10 54 1m-54-1c-25 0-49 13-43 28m43-28c30 1 36 29 29 37'
+                  }
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                />
+
+                <path
+                  d="M0 173h400"
+                  stroke="currentColor"
+                  opacity=".25"
+                />
+              </svg>
+            </div>
+
+            <div className="destination-bottom">
+              <div>
+                <h3 style={heading(31)}>
+                  {c.city}
+                </h3>
+
+                <p style={text(11, 400, '#b7c5bb')}>
+                  {c.note}
+                </p>
+              </div>
+
+              <span className="round-arrow">
+                <Icon name="up-right" size={18} />
+              </span>
+            </div>
+          </motion.button>
+        ))}
+      </div>
+    </section>
+  )
 }
-export function HowItWorks(){return <section className="section-wrap how-section" id="how-it-works"><div className="section-heading"><div><Eyebrow>LESS FRICTION. MORE FREEDOM.</Eyebrow><H size="clamp(28px,3.2vw,42px)">A good trip starts simply.</H></div></div><div className="how-grid">{[{n:'01',title:'Tell us your kind of trip.',copy:'Pick your place, dates, interests and budget. Set the pace that feels right.',icon:'settings'},{n:'02',title:'Make the plan your own.',copy:'Review a proposed itinerary and estimated costs. Slow it down or change the focus.',icon:'sparkles'},{n:'03',title:'Keep the useful things close.',copy:'Save your trip, open directions, export your schedule and check your packing list.',icon:'save'}].map(s=><div key={s.n} className="how-card"><div className="how-top"><span style={text(11,400,'var(--muted)')}>{s.n}</span><Icon name={s.icon as 'settings'}/></div><H as="h3" size={20}>{s.title}</H><P size={12}>{s.copy}</P></div>)}</div></section>}
+
+export function HowItWorks() {
+  return (
+    <section
+      className="section-wrap how-section"
+      id="how-it-works"
+    >
+      <div className="section-heading">
+        <div>
+          <Eyebrow>
+            LESS FRICTION. MORE FREEDOM.
+          </Eyebrow>
+
+          <H size="clamp(28px,3.2vw,42px)">
+            A good trip starts simply.
+          </H>
+        </div>
+      </div>
+
+      <div className="how-grid">
+        {[
+          {
+            n: '01',
+            title: 'Tell us your kind of trip.',
+            copy:
+              'Pick your place, dates, interests and budget. Set the pace that feels right.',
+            icon: 'settings'
+          },
+          {
+            n: '02',
+            title: 'Make the plan your own.',
+            copy:
+              'Review a proposed itinerary and estimated costs. Slow it down or change the focus.',
+            icon: 'sparkles'
+          },
+          {
+            n: '03',
+            title: 'Keep the useful things close.',
+            copy:
+              'Save your trip, open directions, export your schedule and check your packing list.',
+            icon: 'save'
+          }
+        ].map((s) => (
+          <div
+            key={s.n}
+            className="how-card"
+          >
+            <div className="how-top">
+              <span
+                style={text(
+                  11,
+                  400,
+                  'var(--muted)'
+                )}
+              >
+                {s.n}
+              </span>
+
+              <Icon
+                name={s.icon as 'settings'}
+              />
+            </div>
+
+            <H
+              as="h3"
+              size={20}
+            >
+              {s.title}
+            </H>
+
+            <P size={12}>
+              {s.copy}
+            </P>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
