@@ -1,0 +1,13 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { isPlan, planICS, planText, safeURL, directions } from '../src/utils.ts';
+import { buildPlan } from '../lib/planner.mjs';
+const plan=await buildPlan({city:'Hyderabad',startDate:'2031-04-02',days:3,travellers:2,budget:15000},{today:'2031-04-01',weatherEnabled:false});
+test('the generated plan passes the import schema',()=>assert.equal(isPlan(plan),true));
+test('import rejects malformed dates and nested display objects',()=>{for(const mutate of [p=>p.ai.summary={bad:true},p=>p.input.startDate='2031-02-30',p=>p.days[0].entries[0].details={},p=>p.days[0]=null,p=>p.weather.days[0].available='yes',p=>p.budget.total=Infinity]){const p=structuredClone(plan);mutate(p);assert.equal(isPlan(p),false)}});
+test('calendar UID cannot contain injected new lines',()=>{const p=structuredClone(plan);p.id='safe\r\nSTATUS:CONFIRMED';assert.equal(isPlan(p),false)});
+test('only HTTPS external links are allowed',()=>{assert.equal(safeURL('javascript:alert(1)'),undefined);assert.equal(safeURL('data:text/html,x'),undefined);assert.equal(safeURL('https://example.com/'),'https://example.com/')});
+test('calendar exports mark all visits tentative and convert India time to UTC',()=>{const ics=planICS(plan);assert(ics.includes('STATUS:TENTATIVE'));const first=plan.days[0].entries.find(e=>e.type==='attraction');const utc=new Date(Date.parse(plan.days[0].date+'T00:00:00Z')+(first.startMinutes-330)*60000).toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z/,'Z');assert(ics.includes('DTSTART:'+utc))});
+test('calendar escapes punctuation and folds UTF-8 without exceeding 75 octets',()=>{const p=structuredClone(plan);p.days[0].entries[0].title='Test, visit; now\n'+String.fromCodePoint(0x20b9).repeat(150);const ics=planICS(p);assert(ics.includes('Test\\, visit\\; now\\n'));for(const line of ics.split('\r\n'))assert(Buffer.byteLength(line,'utf8')<=75)});
+test('text itinerary retains limitations and excludes real booking claims',()=>{const txt=planText(plan);assert(txt.includes('No payment, real booking or guaranteed price'));assert(txt.includes('ESTIMATED GROUP BUDGET'));assert(txt.includes('DAY 3'))});
+test('day directions encode city and stop names in a Maps URL',()=>{const url=new URL(directions(plan.days[0],plan.input.city));assert.equal(url.protocol,'https:');assert.equal(url.searchParams.get('api'),'1')});

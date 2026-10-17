@@ -1,0 +1,93 @@
+import { useEffect, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
+import Hero, { Destinations, HowItWorks } from './components/Hero'
+import TripForm from './components/TripForm'
+import Results, { BudgetSummary, EmptyPlan, PrintView } from './components/Results'
+import { H, P, Eyebrow, Button, Icon, Modal, Field, Input, Badge, External, text } from './components/UI'
+import { api, initialInput, isPlan, readSaved, readBookings, persist, formatDate, money, download, today } from './utils'
+import type { AppConfig, City, Plan, TripInput, SavedTrip, DemoBooking, Tab, Weather } from './types'
+
+export default function App(){
+  const [config,setConfig]=useState<AppConfig|null>(null),[connectionError,setConnectionError]=useState('')
+  const [input,setInput]=useState<TripInput>(initialInput),[plan,setPlan]=useState<Plan|null>(null)
+  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[weatherBusy,setWeatherBusy]=useState(false),[tab,setTab]=useState<Tab>('itinerary')
+  const [saved,setSaved]=useState<SavedTrip[]>(readSaved),[bookings,setBookings]=useState<DemoBooking[]>(readBookings)
+  const [modal,setModal]=useState<'saved'|'save'|'setup'|'privacy'|null>(null),[saveName,setSaveName]=useState(''),[search,setSearch]=useState('')
+  const [toast,setToast]=useState('')
+  const activeRequest=useRef(false),toastTimer=useRef<ReturnType<typeof setTimeout>|null>(null),importRef=useRef<HTMLInputElement>(null)
+  const notify=(message:string)=>{setToast(message);if(toastTimer.current)clearTimeout(toastTimer.current);toastTimer.current=setTimeout(()=>setToast(''),5500)}
+  const connect=async()=>{setConnectionError('');try{setConfig(await api<AppConfig>('/api/config',undefined,AbortSignal.timeout(10000)))}catch{setConnectionError('The planner backend is not connected. Start the project with START-WINDOWS.bat or npm run dev, then retry.')}}
+  useEffect(()=>{void connect();return()=>{if(toastTimer.current)clearTimeout(toastTimer.current)}},[])
+  const scrollTo=(id:string)=>document.getElementById(id)?.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'})
+  const generate=async(source:TripInput=input)=>{
+    if(activeRequest.current)return;activeRequest.current=true;setBusy(true);setError('');scrollTo('planner')
+    try{
+      const next=await api<Plan>('/api/plan',source,AbortSignal.timeout(45000));
+      if(!isPlan(next))throw new Error('The server returned an incomplete plan. Please try again.');
+      setPlan(next);setInput(next.input);setTab('itinerary');
+      if(window.matchMedia('(max-width: 1050px)').matches)setTimeout(()=>scrollTo('trip-result'),100)
+      notify(next.ai.mode==='Gemini-assisted'?'Your Gemini-assisted plan is ready.':'Your rule-based plan is ready. No AI response is being claimed.');
+    }catch(e){setError(e instanceof Error?e.message:'Could not create your trip. Please try again.');if(plan)notify('Your earlier plan is unchanged. The new request did not complete.');}
+    finally{activeRequest.current=false;setBusy(false)}
+  }
+  const sample=()=>{const next=initialInput();if(config)next.startDate=config.today<next.startDate?next.startDate:config.today;setInput(next);void generate(next)}
+  const chooseCity=(city:City)=>{setInput({...input,city,excludedPlaceIds:[],seed:0});scrollTo('planner')}
+  const revise=(overrides:Partial<TripInput>)=>{if(plan)void generate({...plan.input,...overrides})}
+  const saveTrips=(next:SavedTrip[])=>{setSaved(next);const ok=persist('aurora-trips-v2',next);if(!ok)notify('Browser storage is full or blocked. Export JSON to keep your trip.');return ok}
+  const openSave=()=>{if(!plan)return;setSaveName(saved.find(s=>s.plan.id===plan.id)?.name||plan.title);setModal('save')}
+  const saveCurrent=()=>{
+    if(!plan||!saveName.trim())return;
+    if(!saved.some(s=>s.plan.id===plan.id)&&saved.length>=20){notify('The browser library holds 20 trips. Export or remove one first.');return;}
+    const item={name:saveName.trim().slice(0,70),savedAt:new Date().toISOString(),plan};
+    if(saveTrips([item,...saved.filter(s=>s.plan.id!==plan.id)]))notify('Saved to this browser. Export JSON for a portable backup.');setModal(null)
+  }
+  const openSaved=(trip:SavedTrip)=>{if(busy){notify('Wait for the current request to finish.');return;}setPlan(trip.plan);setInput(trip.plan.input);setTab('itinerary');setError('');setModal(null);setTimeout(()=>scrollTo('trip-result'),100)}
+  const deleteSaved=(id:string)=>{if(!window.confirm('Remove this saved trip from this browser? Export a JSON backup first to keep a copy.'))return;const ok=saveTrips(saved.filter(s=>s.plan.id!==id));if(ok)notify('Saved trip removed. Any demo records remain in this browser.');}
+  const importTrip=async(file?:File)=>{
+    if(!file)return;
+    try{
+      if(file.size>512000)throw new Error('Choose an Aurora JSON export smaller than 500 KB.');
+      const parsed=JSON.parse(await file.text());const candidate=parsed?.plan??parsed;
+      if(!isPlan(candidate))throw new Error('This is not a supported Aurora or Travel Lite trip export.');
+      if(saved.length>=20&&!saved.some(s=>s.plan.id===candidate.id))throw new Error('The library is full. Remove a saved trip first.');
+      const next={name:typeof parsed?.name==='string'?parsed.name.slice(0,70):candidate.title,savedAt:new Date().toISOString(),plan:candidate};
+      if(saveTrips([next,...saved.filter(s=>s.plan.id!==candidate.id)]))notify('Trip imported. Its estimates and forecasts are from the saved snapshot.');
+    }catch(e){notify(e instanceof Error?e.message:'This file could not be imported.');}
+    finally{if(importRef.current)importRef.current.value=''}
+  }
+  const recordBooking=(booking:DemoBooking)=>{
+    if(bookings.length>=100){notify('This demo supports 100 local records. Export records before clearing local data.');return;}
+    const next=[booking,...bookings];setBookings(next);if(persist('aurora-bookings-v2',next))notify('Demo record created. No actual booking or payment was made.');else notify('Demo recorded for this session only; browser storage is blocked.');
+  }
+  const cancelBooking=(id:string)=>{const next=bookings.map(b=>b.id===id?{...b,status:'Cancelled' as const}:b);setBookings(next);if(persist('aurora-bookings-v2',next))notify('Demo record cancelled. No real reservation was involved.');else notify('Change kept for this session only; browser storage is blocked.')}
+  const refreshWeather=async()=>{
+    if(!plan||weatherBusy||busy)return;const id=plan.id;setWeatherBusy(true);
+    try{const w=await api<Weather>('/api/weather',plan.input,AbortSignal.timeout(15000));
+      const packing=['Water bottle','Phone charger / power bank','Comfortable footwear','Required travel identification'];
+      if(w.days.some(d=>d.available&&(d.rain??0)>=50))packing.push('Rain jacket or umbrella');
+      if(w.days.some(d=>d.available&&(d.high??0)>=30))packing.push('Sun protection and a hat');
+      setPlan(old=>old?.id===id?{...old,weather:w,packing,days:old.days.map(d=>({...d,weather:w.days.find(x=>x.date===d.date)||{date:d.date,available:false}}))}:old);notify(w.status==='available'?'Forecast updated. Save the trip again to keep the snapshot.':w.message)
+    }catch(e){notify(e instanceof Error?e.message:'Weather could not be refreshed.')}finally{setWeatherBusy(false)}
+  }
+  const clearLocalData=()=>{if(!confirm('Clear Aurora saved trips, packing lists and demo records from this browser? Download any backups first.'))return;try{Object.keys(localStorage).filter(k=>k.startsWith('aurora-')).forEach(k=>localStorage.removeItem(k));setSaved([]);setBookings([]);setPlan(null);setInput(initialInput());setModal(null);notify('Aurora browser data cleared. Exported files were not deleted.')}catch{notify('Browser storage could not be cleared.')}}
+  return <>
+    <div className="screen-app"><Hero config={config} onPlan={()=>scrollTo('planner')} onDemo={sample} onSaved={()=>setModal('saved')} onCity={chooseCity} savedCount={saved.length} busy={busy}/>
+      <Destinations onSelect={chooseCity}/>
+      <main id="planner" className="planner-section"><div className="section-wrap"><div className="section-heading"><div><Eyebrow>YOUR NEXT FEW DAYS, REIMAGINED.</Eyebrow><H size="clamp(29px,3.2vw,43px)">Good plans. Better memories.</H></div><div className="planner-status"><span className={`status-dot ${config?'online':''}`}/><span style={text(10,500,'var(--muted)')}>{config?'Local planner ready':'Connecting to planner'}</span><button className="subtle-link" style={text(10,400,'var(--mint)')} onClick={()=>setModal('setup')}>AI setup <Icon name="up-right" size={11}/></button></div></div>
+      {connectionError&&<div className="notice warning connection-error" role="alert"><Icon name="info"/><P size={12}>{connectionError}</P><Button small onClick={()=>void connect()}>Retry connection</Button></div>}
+      {error&&<div className="notice warning connection-error" role="alert"><Icon name="info"/><P size={12}>{error}{plan?' Your previous plan is still shown below.':''}</P><button className="icon-btn" onClick={()=>setError('')} aria-label="Dismiss error"><Icon name="close" size={15}/></button></div>}
+      <div className={`planner-layout ${plan?'has-result':''}`}><div className="planner-left"><TripForm input={input} setInput={setInput} config={config} busy={busy} onSubmit={()=>void generate({...input,action:'',seed:0})} onSetup={()=>setModal('setup')}/><div className="privacy-note"><Icon name="shield" size={14}/><P size={10}>Saved trips stay in this browser. No login, no payment details.<button className="subtle-link" style={text(10,400,'var(--mint)')} onClick={()=>setModal('privacy')}> Data & privacy</button></P></div></div>
+      <div className="planner-right">{plan?<><Results plan={plan} tab={tab} setTab={setTab} busy={busy} config={config} onSave={openSave} isSaved={saved.some(s=>s.plan.id===plan.id)} onRevise={revise} onSetup={()=>setModal('setup')} bookings={bookings} onBook={recordBooking} onCancel={cancelBooking} onRefreshWeather={()=>void refreshWeather()} weatherBusy={weatherBusy||busy} notify={notify}/><div className="summary-column"><BudgetSummary plan={plan} onDetails={()=>{setTab('budget');scrollTo('trip-result')}}/><div className="save-prompt"><Icon name="save" size={19}/><H as="h3" size={17}>Keep this little escape.</H><P size={11}>A plan worth coming back to. Save it locally or take a copy with you.</P><Button small onClick={openSave}>Save to my trips</Button><Button small variant="ghost" icon="refresh" disabled={busy} onClick={()=>revise({seed:((plan.input.seed||0)+1)%100000,action:'',request:'',useAI:false})}>Try a rule-based variation</Button></div></div></>:<EmptyPlan busy={busy} onDemo={sample}/>}</div></div>
+      </div></main>
+      <HowItWorks/>
+      <section className="closing-banner section-wrap"><div><Eyebrow>THERE IS A LITTLE MORE OUT THERE.</Eyebrow><H size="clamp(26px,3vw,39px)">Leave room for a good story.</H></div><Button variant="light" onClick={()=>scrollTo('planner')}>Make a little plan <Icon name="up-right" size={16}/></Button></section>
+      <footer className="footer section-wrap"><div className="brand"><Icon name="car" size={26}/><span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:500,letterSpacing:'-.05em'}}>aurora<span style={text(10,400,'var(--muted)')}> / travel</span></span></div><P size={10}>A free local travel-planning prototype.<br/>Estimated costs. Proposed visits. Demo bookings only.</P><div className="footer-links"><button style={text(11,400,'var(--muted)')} onClick={()=>setModal('privacy')}>Data & privacy</button><button style={text(11,400,'var(--muted)')} onClick={()=>setModal('setup')}>AI setup</button><a href="#how-it-works" style={text(11,400,'var(--muted)')}>How it works</a></div></footer>
+    </div>
+    <PrintView plan={plan}/>
+    {modal==='save'&&<Modal title="Keep this escape." onClose={()=>setModal(null)}><P size={12}>Save a snapshot in this browser. It does not create an account or cloud backup.</P><form className="save-form" onSubmit={e=>{e.preventDefault();saveCurrent()}}><Field label="Give your trip a name"><Input autoFocus required maxLength={70} value={saveName} onChange={e=>setSaveName(e.target.value)}/></Field><Button variant="primary" type="submit" icon="save" disabled={!saveName.trim()}>Save trip</Button></form></Modal>}
+    {modal==='saved'&&<Modal title="A few trips to look forward to." wide onClose={()=>setModal(null)}><div className="saved-toolbar"><P size={12}>Stored only in this browser. Keep a JSON backup for another device.</P><input ref={importRef} type="file" accept=".json,application/json" hidden onChange={e=>void importTrip(e.target.files?.[0])}/><Button small icon="upload" onClick={()=>importRef.current?.click()}>Import JSON</Button></div><Input aria-label="Search saved trips" placeholder="Find a trip by name or destination" value={search} onChange={e=>setSearch(e.target.value)} className="saved-search"/><div className="saved-grid">{saved.filter(s=>(s.name+' '+s.plan.input.city).toLowerCase().includes(search.toLowerCase())).map(s=><article className={`saved-card saved-${s.plan.input.city.toLowerCase()}`} key={s.plan.id}><div className="saved-card-top"><Badge>{s.plan.input.city}</Badge><button className="icon-btn" aria-label={`Delete ${s.name}`} onClick={()=>deleteSaved(s.plan.id)}><Icon name="trash" size={15}/></button></div><H as="h3" size={21}>{s.name}</H><P size={11}>{formatDate(s.plan.input.startDate,true)} / {s.plan.input.days} days / {s.plan.input.travellers} travellers</P><div className="saved-cost"><span style={text(15,500)}>{money(s.plan.budget.total)}</span><span style={text(10,400,'var(--muted)')}>estimated</span>{s.plan.input.startDate<today()&&<Badge kind="amber">Past trip</Badge>}</div><div className="saved-actions"><Button small variant="primary" disabled={busy} onClick={()=>openSaved(s)}>Open trip <Icon name="arrow" size={13}/></Button><button className="icon-btn" aria-label={`Export ${s.name}`} onClick={()=>download(`aurora-${s.plan.input.city.toLowerCase()}-${s.plan.input.startDate}.json`,JSON.stringify(s,null,2),'application/json')}><Icon name="download" size={16}/></button></div></article>)}</div>{saved.length===0&&<div className="saved-empty"><Icon name="save" size={32}/><H size={24}>Your travel stories start here.</H><P size={12}>Create a plan, then select Save to my trips.</P><Button small onClick={()=>{setModal(null);scrollTo('planner')}}>Plan an escape</Button></div>}{saved.length>0&&!saved.some(s=>(s.name+' '+s.plan.input.city).toLowerCase().includes(search.toLowerCase()))&&<P size={12}>No trips match that search.</P>}{bookings.length>0&&<details className="all-records"><summary style={text(12,500)}>All local demo records ({bookings.length})</summary>{bookings.map(b=><div className="all-record-line" key={b.id}><span style={text(11)}>{b.id} / {b.type} / {b.city}</span><Badge kind="amber">{b.status}</Badge>{b.status!=='Cancelled'&&<button style={text(10)} onClick={()=>cancelBooking(b.id)}>Cancel demo</button>}</div>)}</details>}</Modal>}
+    {modal==='setup'&&<Modal title="A little AI, entirely optional." onClose={()=>setModal(null)}><Badge kind={config?.aiConfigured?'green':'neutral'}>{config?.aiConfigured?'Gemini key configured':'No Gemini key configured'}</Badge><P size={13}>The rule-based planner already works for free. Gemini can rank attractions using your interests and custom change requests; code still creates the timetable and calculates the budget.</P><div className="setup-steps"><div><span>01</span><P size={12}>Create a key in Google AI Studio using a project marked <strong>Free Tier</strong>. Do not enable billing to use this project for free.</P></div><div><span>02</span><P size={12}>Copy <code>.env.example</code> to <code>.env</code> in the project folder. Put your key only in that server-side file.</P></div><pre style={{...text(11),fontFamily:'monospace'}}>GEMINI_API_KEY=your_key_here{'\n'}GEMINI_MODEL=gemini-3.5-flash-lite</pre><div><span>03</span><P size={12}>Restart the Node server, refresh this page, switch on <strong>A little AI assistance</strong>, and generate a new plan.</P></div></div><div className="notice warning"><Icon name="info" size={16}/><P size={11}>Free-tier access is quota-limited and account-dependent. This application cannot verify your billing tier. An API key from a paid project can incur charges; no automatic paid-model fallback is used.</P></div><P size={11}>With AI enabled, trip preferences and request text go to Google. Weather requests send destination coordinates to Open-Meteo. Keep sensitive details out of the form. Never paste your API key into this website, screenshots or GitHub.</P><div className="service-links"><External href="https://aistudio.google.com/api-keys">Open AI Studio</External><External href="https://ai.google.dev/gemini-api/docs/pricing">Check free-tier pricing</External></div></Modal>}
+    {modal==='privacy'&&<Modal title="Clear about what stays where." onClose={()=>setModal(null)}><div className="privacy-sections"><section><H as="h3" size={18}>In this browser</H><P size={12}>Saved trips, checklists and demo booking records use local storage. They are not synced to the cloud and can disappear when browser data is cleared. Export JSON for a portable backup.</P></section><section><H as="h3" size={18}>External services</H><P size={12}>The local Node server retrieves weather from Open-Meteo. When you switch Gemini on, it sends trip preferences and your request text to Google. Opening Maps or tourism links takes you to those services. No analytics or advertising trackers are added.</P></section><section><H as="h3" size={18}>What is not live</H><P size={12}>Costs, visit durations and travel buffers are editable planning assumptions. Hours, access, accessibility, traffic, tickets and availability are not verified. Check the linked venue information and provider terms yourself before travelling.</P></section><section><H as="h3" size={18}>Bookings are demonstrations</H><P size={12}>A demo record is not a reservation, payment confirmation, ticket or receipt. No card details, passport numbers or account passwords are requested.</P></section></div><Button small icon="trash" onClick={clearLocalData}>Clear Aurora browser data</Button></Modal>}
+    <AnimatePresence>{toast&&<motion.div className="toast" role="status" initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} exit={{opacity:0,y:10}}><Icon name="info" size={17}/><span style={text(12)}>{toast}</span><button className="icon-btn" aria-label="Dismiss notification" onClick={()=>setToast('')}><Icon name="close" size={14}/></button></motion.div>}</AnimatePresence>
+  </>
+}

@@ -1,0 +1,70 @@
+AURORA TRAVEL - START HERE
+==========================
+This is the new React version of the Travel Lite project.
+Use this folder, not the older Travel Lite folder. Do not use Live Server.
+
+ON WINDOWS
+1. Extract the complete ZIP. Open the aurora-travel folder inside it.
+2. Install Node.js LTS from https://nodejs.org/en/download if needed.
+   This project needs Node.js 22.12 or newer. Reopen VS Code after installing.
+3. Double-click START-WINDOWS.bat.
+4. Keep the black terminal window open. First setup downloads project packages,
+   tries the optional reference video, and builds the website. Internet is
+   needed for the first setup. No payment or account is needed for local rules.
+5. When setup completes, the browser should open http://localhost:3000.
+   Open that address manually if it does not open automatically.
+6. Enter a trip or choose 'Try a sample trip'. Leave AI switched off at first.
+7. Press Ctrl+C in the terminal when you are finished using the application.
+
+IN VS CODE INSTEAD
+File -> Open Folder -> select aurora-travel.
+Terminal -> New Terminal. Run each command separately:
+
+    npm install
+    npm run build
+    npm start
+
+Open http://localhost:3000 and keep the terminal running.
+If PowerShell blocks npm.ps1, use npm.cmd in place of npm.
+
+EDITING THE DESIGN
+Run npm run dev. Open http://localhost:5173. React changes refresh automatically.
+The dev launcher starts both Vite and the Node backend; do not run another copy.
+After editing, npm run build prepares the version used by npm start.
+
+OPTIONAL GEMINI AI
+The app works without a key. To enable AI:
+1. Open https://aistudio.google.com/api-keys.
+2. Use a project that is marked Free Tier; do not enable billing for this demo.
+3. Copy .env.example to .env in this folder.
+4. Put your key after GEMINI_API_KEY= in .env. Never put it in src or public.
+5. Restart the server, refresh the page and switch on 'A little AI assistance'.
+6. Look for 'Gemini-assisted' on a successful result. 'Rule-based' means no AI
+   result is being claimed. Errors or quota limits trigger an honest fallback.
+Free access and quotas depend on Google and your project. The app cannot verify
+billing status. A paid-project key can incur charges. Never share your key.
+
+WHAT IS INCLUDED
+Three destinations (Hyderabad, Jaipur, Goa); trips of one to three days;
+preferences and arrival/departure windows; daily schedules; cost assumptions;
+budget warnings; revisions; optional Gemini ranking; weather integration;
+maps and official venue links; local trip saves; JSON import and export;
+text export; Print / Save PDF; tentative calendar export; packing checklist;
+external service searches; create/cancel/export DEMO booking records.
+
+IMPORTANT LIMITATIONS
+- No real booking, payment, live inventory, or guaranteed price is included.
+- Hotel, meal, activity and transport amounts are estimates you can change.
+- Opening hours, route travel times and accessibility are not verified.
+- Weather requires internet and is only available within forecast coverage.
+- Saved trips stay in this browser and origin. Export JSON for a backup.
+- The server is designed for local use, not an authenticated public service.
+- The reference video could not be fetched in the build environment. The
+  included illustrated emerald background works without it. The launcher
+  tries to fetch the supplied video during first setup. If it is unavailable,
+  the fallback remains; this does not prevent trip planning.
+
+BEFORE YOUR PRESENTATION
+Run npm test. Check all three cities, a low budget, saves and reopening,
+weather availability and the demo booking label. See README.md for the demo
+script and TESTING.md for precisely what was and was not verified here.
